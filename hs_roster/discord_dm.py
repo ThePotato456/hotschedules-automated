@@ -70,6 +70,21 @@ def _bot_user_id(token: str, http: httpx.Client) -> str:
     return r.json()["id"]
 
 
+def _respect_rate_limit(r: httpx.Response) -> None:
+    """Proactively honor Discord's per-bucket rate-limit headers: if this request
+    just drained the current window, sleep until it resets so the next request
+    doesn't earn a 429. (429 is still handled reactively as a safety net.)"""
+    remaining = r.headers.get("X-RateLimit-Remaining")
+    reset_after = r.headers.get("X-RateLimit-Reset-After")
+    if remaining is None or reset_after is None:
+        return
+    try:
+        if float(remaining) <= 0:
+            time.sleep(float(reset_after) + 0.05)
+    except ValueError:
+        pass
+
+
 def clear_dms(token: str, recipient_id: str, *, timeout: float = 60.0) -> tuple[int, int]:
     """Delete every message THIS bot sent in the recipient's DM.
 
@@ -87,8 +102,12 @@ def clear_dms(token: str, recipient_id: str, *, timeout: float = 60.0) -> tuple[
             if before:
                 params["before"] = before
             r = http.get(f"{API}/channels/{channel_id}/messages", headers=auth, params=params)
+            if r.status_code == 429:
+                time.sleep(float(r.headers.get("Retry-After", "1")) or 1.0)
+                continue
             if r.status_code != 200:
                 raise RuntimeError(f"List messages failed: HTTP {r.status_code} {r.text[:200]}")
+            _respect_rate_limit(r)
             msgs = r.json()
             if not msgs:
                 break
@@ -112,6 +131,7 @@ def _delete_with_backoff(http: httpx.Client, channel_id: str, message_id: str, a
     for _ in range(5):
         r = http.delete(url, headers=auth)
         if r.status_code in (200, 204):
+            _respect_rate_limit(r)  # pause if this drained the delete bucket
             return True
         if r.status_code == 429:
             retry = float(r.headers.get("Retry-After", "1")) or 1.0
