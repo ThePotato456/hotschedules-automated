@@ -112,6 +112,11 @@ Caddy manages the domain's HTTPS certificate. DNS and inbound ports 80/443 must
 reach Caddy; port 3010 stays private. Caddy does not need filesystem access to
 the cached PDFs because Python serves them over loopback.
 
+Roster pages use the existing website's `/favicon.ico`. Keep that root path
+served by your website's Caddy file server (for example, from
+`/var/www/example.com/favicon.ico`). The roster page security policy allows
+same-origin images so the browser can load the icon.
+
 References: [Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy),
 [handle](https://caddyserver.com/docs/caddyfile/directives/handle),
 [log_skip](https://caddyserver.com/docs/caddyfile/directives/log_skip).

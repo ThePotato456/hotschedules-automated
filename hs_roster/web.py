@@ -105,7 +105,7 @@ def create_app(config: WebConfig) -> Flask:
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'none'; style-src 'self'; base-uri 'none'; "
+            "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; "
             "form-action 'self'; frame-ancestors 'none'"
         )
         return response
