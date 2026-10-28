@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the HotSchedules roster job weekdays at 08:00 (store-local)
+
+[Timer]
+# Monday through Friday at 08:00 local time.
+OnCalendar=Mon..Fri 08:00
+# If the machine was off/asleep at 08:00, run as soon as it's back.
+Persistent=true
+Unit=hotschedules-roster.service
+
+[Install]
+WantedBy=timers.target

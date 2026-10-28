@@ -1,0 +1,17 @@
+# Secrets — never commit
+secrets.env
+*.env
+!*.example.env
+app.hotschedules.com_cookies.txt
+*cookies*.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.playwright/
+
+# Local output / captures
+*.result.json
+roster_result.json

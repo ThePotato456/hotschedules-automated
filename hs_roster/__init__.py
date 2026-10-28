@@ -1,0 +1,1 @@
+"""HotSchedules daily roster automation."""

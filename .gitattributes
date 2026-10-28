@@ -1,0 +1,4 @@
+# These run on Linux — force LF so CRLF never breaks the shebang/units.
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
