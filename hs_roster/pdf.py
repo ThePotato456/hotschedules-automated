@@ -6,12 +6,22 @@ for the roster to render, then page.pdf(). The report page's own print styleshee
 drops the app nav/sidebar, yielding a clean 1-page document.
 """
 from __future__ import annotations
+import os
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
 from .client import HSClient
-from .config import BASE_URL
+from .config import BASE_URL, REPO_ROOT
+
+# Default Playwright to the repo-local browser install (what deploy/setup.sh
+# populates) when it exists and the environment doesn't already point elsewhere.
+# This keeps manual runs, the systemd unit, and setup in agreement without having
+# to export the var. If it doesn't exist (e.g. a dev box that installed to the
+# default cache), we leave Playwright's own default in place.
+_local_browsers = REPO_ROOT / ".playwright"
+if _local_browsers.is_dir():
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_local_browsers))
 
 REPORT_URL = "https://app.hotschedules.com/hs/newReport.hs#roster/{date}"
 
