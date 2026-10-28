@@ -43,9 +43,12 @@ BASE_URL = "https://app.hotschedules.com/hs"
 
 def _bool(name: str, default: bool) -> bool:
     val = os.environ.get(name)
-    if val is None or val == "":
+    if val is None or val.strip() == "":
         return default
-    return val.strip().lower() in ("1", "true", "yes", "on", "y")
+    # Tolerate a trailing inline comment (e.g. "true  # attach pdf") and take the
+    # first token — inline comments aren't valid in env files but be forgiving.
+    token = val.strip().split("#", 1)[0].split()[0].lower() if val.strip().split("#", 1)[0].split() else ""
+    return token in ("1", "true", "yes", "on", "y")
 
 
 def get_delivery_config() -> dict:
