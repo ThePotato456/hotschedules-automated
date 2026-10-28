@@ -193,6 +193,8 @@ journalctl -u hotschedules-roster.service -n 50    # logs
 ## Cached roster print server
 
 Browse saved rosters at `https://example.com/roster/all/<private-token>/`.
+Bookmark `https://example.com/roster/today/<private-token>/` to follow the current
+store-local date whenever you open or refresh the page.
 Discord sends the daily print page, for example
 `https://example.com/roster/2026-10-28/<private-token>/`; its print button uses
 that same URL plus `pdf`. Each link stays on its own date after midnight.

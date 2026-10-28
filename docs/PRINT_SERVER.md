@@ -121,6 +121,7 @@ The endpoints after `/roster` explicitly identify the archive or a specific day:
 | Purpose | URL |
 |---|---|
 | Browse all retained rosters | `https://example.com/roster/all/YOUR_GENERATED_TOKEN/` |
+| Bookmark today's roster | `https://example.com/roster/today/YOUR_GENERATED_TOKEN/` |
 | Print page sent in the October 28 DM | `https://example.com/roster/2026-10-28/YOUR_GENERATED_TOKEN/` |
 | PDF used by that page's print button | `https://example.com/roster/2026-10-28/YOUR_GENERATED_TOKEN/pdf` |
 
@@ -130,6 +131,13 @@ query parameters cannot switch it to another day. It remains on that date after
 midnight and returns 404 once outside the retention window. The public prefix
 alone returns 404. The token still grants access to all retained dates; date paths
 pin the content of a link rather than limiting the token's permissions.
+
+Bookmark `/roster/today/YOUR_GENERATED_TOKEN/` for a permanent entry to today's
+roster. It keeps that URL in the address bar and resolves the current store-local
+date on each open or refresh. Its print button still uses a dated PDF URL, so an
+already loaded page prints the date shown. If today's PDF is not ready, it shows
+the pending state rather than serving yesterday's roster. The archive's Open
+today's roster link uses this endpoint. Discord continues sending fixed-date links.
 
 Discord's Print roster link opens the HTTPS daily page. Tap its Print roster
 button to launch PrintPDF; the shortcut downloads the dated PDF directly from

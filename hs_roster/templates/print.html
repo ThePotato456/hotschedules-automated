@@ -19,7 +19,11 @@
 <a class="button" href="">Refresh page</a>
 {% endif %}
 </section>
+{% if rolling %}
+<p class="note">Bookmark this page for today’s roster. Opening or refreshing it follows the current date in {{ timezone }}. Keep this link private.</p>
+{% else %}
 <p class="note">This link is only for {{ target.strftime('%B %d, %Y') }}. It stays on this date after midnight. Keep it private. Saved PDFs are retained for {{ retention_days }} calendar days.</p>
+{% endif %}
 <details><summary>Set up {{ shortcut_name }}</summary>
 <ol><li>Accept Text and URLs as input.</li><li>Get Contents of URL using Shortcut Input.</li><li>Print the resulting Contents of URL.</li></ol>
 </details>

@@ -137,22 +137,30 @@ def create_app(config: WebConfig) -> Flask:
         ]
         return render_template(
             "archive.html", rosters=rosters, retention_days=config.retention_days,
-            today_url=roster_page_url(config.public_url, token, today),
+            today_url=url_for("today_page", token=token),
         )
 
     @app.get(f"{prefix}/<value>/<token>/")
     def daily(token: str, value: str):
         authorize(token)
-        target = requested_date(value)
-        today = config.today()
+        return render_roster(requested_date(value))
+
+    @app.get(f"{prefix}/today/<token>/")
+    def today_page(token: str):
+        authorize(token)
+        return render_roster(config.today(), rolling=True)
+
+    def render_roster(target: date, *, rolling: bool = False):
+        today = target if rolling else config.today()
         path = roster_path(config.cache_dir, target)
         available = valid_pdf(path)
-        pdf_url = roster_pdf_url(config.public_url, token, target)
+        pdf_url = roster_pdf_url(config.public_url, config.token, target)
         shortcut = "shortcuts://run-shortcut?" + urlencode({
             "name": config.shortcut_name, "input": "text", "text": pdf_url,
         })
         response = app.make_response((render_template(
-            "print.html", target=target, today=today,
+            "print.html", target=target, today=today, rolling=rolling,
+            timezone=config.timezone,
             available=available, shortcut=shortcut, pdf_url=pdf_url,
             shortcut_name=config.shortcut_name, retention_days=config.retention_days,
             updated=datetime.fromtimestamp(path.stat().st_mtime, ZoneInfo(config.timezone)).strftime("%b %d, %I:%M %p %Z") if available else None,

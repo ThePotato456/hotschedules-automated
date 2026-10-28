@@ -35,6 +35,7 @@ class WebTests(unittest.TestCase):
         self.client = create_app(self.config).test_client()
         self.root = f"/roster/{TODAY.isoformat()}/{self.config.token}/"
         self.archive = f"/roster/all/{self.config.token}/"
+        self.today_url = f"/roster/today/{self.config.token}/"
         self.legacy = f"/roster/{self.config.token}/"
 
     def daily_path(self, value):
@@ -47,7 +48,7 @@ class WebTests(unittest.TestCase):
 
     def test_page_and_pdf_require_secret(self):
         self.save()
-        for path in ["/roster/", "/roster/all/wrong/", "/roster/2026-10-28/wrong/",
+        for path in ["/roster/", "/roster/all/wrong/", "/roster/today/wrong/", "/roster/2026-10-28/wrong/",
                      "/roster/2026-10-28/wrong/pdf", "/roster/wrong/",
                      "/roster/wrong/rosters/2026-10-28.pdf"]:
             self.assertEqual(self.client.get(path).status_code, 404)
@@ -103,6 +104,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("All saved rosters", body)
         self.assertIn(self.daily_path("2026-10-27"), body)
         self.assertIn(self.root, body)
+        self.assertIn(self.today_url, body)
         self.assertNotIn("shortcuts://", body)
         daily = self.client.get(self.daily_path("2026-10-27")).get_data(as_text=True)
         self.assertIn("Saved roster", daily)
@@ -134,6 +136,36 @@ class WebTests(unittest.TestCase):
             self.assertNotIn("<select", body)
             with self.client.get(self.root + "pdf?date=2026-10-29") as response:
                 self.assertEqual(response.data, PDF)
+
+    def test_today_page_keeps_bookmark_url_and_rolls_over_with_store_date(self):
+        self.save()
+        self.save(TODAY + timedelta(days=1)).write_bytes(PDF + b"\ntomorrow")
+        for day, label in [(TODAY, "Wednesday, October 28, 2026"),
+                           (TODAY + timedelta(days=1), "Thursday, October 29, 2026")]:
+            with self.subTest(day=day), patch.object(WebConfig, "today", return_value=day):
+                response = self.client.get(self.today_url + "?date=2026-10-27")
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn("Location", response.headers)
+                self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+                body = response.get_data(as_text=True)
+                self.assertIn(label, body)
+                self.assertIn("Bookmark this page", body)
+                self.assertIn("America/Chicago", body)
+                link = html.unescape(body.split('href="shortcuts://', 1)[1].split('"', 1)[0])
+                pdf_url = parse_qs(urlsplit("shortcuts://" + link).query)["text"][0]
+                self.assertEqual(pdf_url, "https://example.com" + self.daily_path(day.isoformat()) + "pdf")
+
+    def test_today_missing_pdf_never_falls_back_to_yesterday_or_fetches(self):
+        self.save(TODAY - timedelta(days=1))
+        with patch("hs_roster.web.acquire_roster") as acquire:
+            response = self.client.get(self.today_url)
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.headers["Retry-After"], "60")
+            body = response.get_data(as_text=True)
+            self.assertIn("Preparing today’s roster", body)
+            self.assertNotIn("shortcuts://", body)
+            self.assertNotIn("2026-10-27", body)
+            acquire.assert_not_called()
 
     def test_legacy_links_redirect_to_specific_endpoints(self):
         self.save()
