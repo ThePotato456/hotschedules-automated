@@ -41,6 +41,13 @@ STORE_TZ = os.environ.get("HS_STORE_TZ", "America/Chicago")
 BASE_URL = "https://app.hotschedules.com/hs"
 
 
+def _bool(name: str, default: bool) -> bool:
+    val = os.environ.get(name)
+    if val is None or val == "":
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on", "y")
+
+
 def get_delivery_config() -> dict:
     """Discord + uploader settings (loaded from secrets.env / environment)."""
     load_env_file()
@@ -54,4 +61,10 @@ def get_delivery_config() -> dict:
         "token": token,
         "recipient_id": recipient,
         "uploader_base": os.environ.get("UPLOADER_BASE_URL", "https://files.example.com"),
+        # Upload the PDF to the file host (and so have a link at all).
+        "publish_enabled": _bool("PUBLISH_ENABLED", True),
+        # Show the hosted link in the DM text.
+        "dm_include_link": _bool("DM_INCLUDE_LINK", True),
+        # Attach the PDF file to the DM.
+        "dm_attach_pdf": _bool("DM_ATTACH_PDF", True),
     }

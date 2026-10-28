@@ -58,6 +58,13 @@ Copy `secrets.env.example` → `secrets.env` (git-ignored) and set:
 | `DISCORD_RECIPIENT_ID` | Your Discord user ID (Developer Mode → right-click name → Copy User ID) |
 | `HS_STORE_TZ` *(opt)* | Store timezone; default `America/Chicago` |
 | `UPLOADER_BASE_URL` *(opt)* | File host; default `https://files.example.com` |
+| `PUBLISH_ENABLED` *(opt)* | Upload the PDF to the file host (needed for a link). Default `true` |
+| `DM_INCLUDE_LINK` *(opt)* | Show the hosted link in the DM text. Default `true` |
+| `DM_ATTACH_PDF` *(opt)* | Attach the PDF file to the DM. Default `true` |
+
+Booleans accept `true/false`, `1/0`, `yes/no`, `on/off`. E.g. to send only the
+link (no attachment): `DM_ATTACH_PDF=false`. To attach the PDF but not upload it
+anywhere: `PUBLISH_ENABLED=false` (the DM then has no link).
 
 ## Run manually
 

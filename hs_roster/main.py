@@ -40,19 +40,24 @@ def run(target: date | None = None) -> int:
     finally:
         client.close()
 
-    pub = publish_pdf(out, base_url=cfg["uploader_base"])
-    log.info("published -> %s (expires %s)", pub.public_url, pub.expires_at)
-
-    if rows:
-        summary = f"{len(rows)} shift(s) scheduled."
+    pub = None
+    if cfg["publish_enabled"]:
+        pub = publish_pdf(out, base_url=cfg["uploader_base"])
+        log.info("published -> %s (expires %s)", pub.public_url, pub.expires_at)
     else:
-        summary = "No shifts scheduled."
-    content = (
-        f"**Roster — {_human_date(target)}**\n"
-        f"{summary}\n{pub.public_url}\n"
-        f"_(link expires {pub.expires_at[:10]})_"
-    )
-    send_roster_dm(cfg["token"], cfg["recipient_id"], out, content)
+        log.info("publish disabled (PUBLISH_ENABLED=false) — skipping upload")
+
+    summary = f"{len(rows)} shift(s) scheduled." if rows else "No shifts scheduled."
+    lines = [f"**Roster — {_human_date(target)}**", summary]
+    if pub and cfg["dm_include_link"]:
+        lines.append(pub.public_url)
+        lines.append(f"_(link expires {pub.expires_at[:10]})_")
+    content = "\n".join(lines)
+
+    attachment = out if cfg["dm_attach_pdf"] else None
+    if attachment is None and not (pub and cfg["dm_include_link"]):
+        log.warning("DM has neither PDF attachment nor link — sending text only")
+    send_roster_dm(cfg["token"], cfg["recipient_id"], content, pdf_path=attachment)
     log.info("DM delivered to %s", cfg["recipient_id"])
     return 0
 

@@ -28,27 +28,26 @@ def open_dm_channel(token: str, recipient_id: str, http: httpx.Client) -> str:
 def send_roster_dm(
     token: str,
     recipient_id: str,
-    pdf_path: str | Path,
     content: str,
+    pdf_path: str | Path | None = None,
     *,
     timeout: float = 60.0,
 ) -> None:
-    """Send `content` + the PDF attachment to the recipient's DM."""
-    pdf_path = Path(pdf_path)
+    """DM `content` to the recipient, optionally attaching the PDF at `pdf_path`."""
     with httpx.Client(timeout=timeout) as http:
         channel_id = open_dm_channel(token, recipient_id, http)
-        payload = {
-            "content": content,
-            "attachments": [{"id": 0, "filename": pdf_path.name}],
-        }
-        files = {
-            "payload_json": (None, json.dumps(payload), "application/json"),
-            "files[0]": (pdf_path.name, pdf_path.read_bytes(), "application/pdf"),
-        }
-        r = http.post(
-            f"{API}/channels/{channel_id}/messages",
-            headers={"Authorization": f"Bot {token}"},
-            files=files,
-        )
+        url = f"{API}/channels/{channel_id}/messages"
+        auth = {"Authorization": f"Bot {token}"}
+        if pdf_path is None:
+            r = http.post(url, headers={**auth, "Content-Type": "application/json"},
+                          content=json.dumps({"content": content}))
+        else:
+            pdf_path = Path(pdf_path)
+            payload = {"content": content, "attachments": [{"id": 0, "filename": pdf_path.name}]}
+            files = {
+                "payload_json": (None, json.dumps(payload), "application/json"),
+                "files[0]": (pdf_path.name, pdf_path.read_bytes(), "application/pdf"),
+            }
+            r = http.post(url, headers=auth, files=files)
         if r.status_code not in (200, 201):
             raise RuntimeError(f"Send DM failed: HTTP {r.status_code} {r.text[:300]}")
