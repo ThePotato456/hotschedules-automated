@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import sys
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .client import HSClient
@@ -49,16 +49,21 @@ def run(target: date | None = None) -> int:
         log.info("publish disabled (PUBLISH_ENABLED=false) — skipping upload")
 
     summary = f"{len(rows)} shift(s) scheduled." if rows else "No shifts scheduled."
-    lines = [f"**Roster — {_human_date(target)}**", summary]
+    embed: dict = {
+        "title": f"Roster — {_human_date(target)}",
+        "description": summary,
+        "color": 0xF26B21,  # HotSchedules orange
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": "HotSchedules daily roster"},
+    }
     if pub and cfg["dm_include_link"]:
-        lines.append(pub.public_url)
-        lines.append(f"_(link expires {pub.expires_at[:10]})_")
-    content = "\n".join(lines)
+        embed["fields"] = [{"name": "Download", "value": f"[Open roster PDF]({pub.public_url})"}]
+        embed["footer"] = {"text": f"Link expires {pub.expires_at[:10]}"}
 
     attachment = out if cfg["dm_attach_pdf"] else None
     if attachment is None and not (pub and cfg["dm_include_link"]):
-        log.warning("DM has neither PDF attachment nor link — sending text only")
-    send_roster_dm(cfg["token"], cfg["recipient_id"], content, pdf_path=attachment)
+        log.warning("DM has neither PDF attachment nor link — embed only")
+    send_roster_dm(cfg["token"], cfg["recipient_id"], embed=embed, pdf_path=attachment)
     log.info("DM delivered to %s", cfg["recipient_id"])
     return 0
 

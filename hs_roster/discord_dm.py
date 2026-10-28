@@ -29,29 +29,38 @@ def open_dm_channel(token: str, recipient_id: str, http: httpx.Client) -> str:
 def send_roster_dm(
     token: str,
     recipient_id: str,
-    content: str,
-    pdf_path: str | Path | None = None,
     *,
+    content: str | None = None,
+    embed: dict | None = None,
+    pdf_path: str | Path | None = None,
     timeout: float = 60.0,
 ) -> None:
-    """DM `content` to the recipient, optionally attaching the PDF at `pdf_path`."""
+    """DM the recipient the embed/content first, then the PDF as a separate
+    message so the embed shows above the file attachment."""
+    def _check(r: httpx.Response) -> None:
+        if r.status_code not in (200, 201):
+            raise RuntimeError(f"Send DM failed: HTTP {r.status_code} {r.text[:300]}")
+
     with httpx.Client(timeout=timeout) as http:
         channel_id = open_dm_channel(token, recipient_id, http)
         url = f"{API}/channels/{channel_id}/messages"
         auth = {"Authorization": f"Bot {token}"}
-        if pdf_path is None:
-            r = http.post(url, headers={**auth, "Content-Type": "application/json"},
-                          content=json.dumps({"content": content}))
-        else:
+
+        # 1) Embed / text first, as its own message.
+        if content or embed:
+            payload: dict = {}
+            if content:
+                payload["content"] = content
+            if embed:
+                payload["embeds"] = [embed]
+            _check(http.post(url, headers={**auth, "Content-Type": "application/json"},
+                             content=json.dumps(payload)))
+
+        # 2) The PDF attachment, as a separate follow-up message.
+        if pdf_path is not None:
             pdf_path = Path(pdf_path)
-            payload = {"content": content, "attachments": [{"id": 0, "filename": pdf_path.name}]}
-            files = {
-                "payload_json": (None, json.dumps(payload), "application/json"),
-                "files[0]": (pdf_path.name, pdf_path.read_bytes(), "application/pdf"),
-            }
-            r = http.post(url, headers=auth, files=files)
-        if r.status_code not in (200, 201):
-            raise RuntimeError(f"Send DM failed: HTTP {r.status_code} {r.text[:300]}")
+            files = {"files[0]": (pdf_path.name, pdf_path.read_bytes(), "application/pdf")}
+            _check(http.post(url, headers=auth, files=files))
 
 
 def _bot_user_id(token: str, http: httpx.Client) -> str:
