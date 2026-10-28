@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roster · {{ target.isoformat() }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
+</head>
+<body><main>
+<p class="eyebrow">HotSchedules · Daily roster</p>
+<h1>Ready for<br>the day.</h1>
+<p class="date">{{ target.strftime('%A, %B %d, %Y') }}</p>
+<section class="card" aria-label="Roster printing">
+{% if available %}
+<span class="status">PDF ready</span>
+<h2>{{ 'Today’s roster' if target == today else 'Saved roster' }}</h2>
+<p>Updated {{ updated }}. The PDF is prepared and ready to download.</p>
+<a class="button" href="{{ shortcut }}">Print roster</a>
+<a class="secondary" href="{{ pdf_url }}">Open PDF</a>
+<p class="note">Opens {{ shortcut_name }} on your iPhone or iPad, then the print dialog.</p>
+{% else %}
+<span class="status pending">Not ready yet</span>
+<h2>{{ 'Preparing today’s roster' if target == today else 'No saved roster for this day' }}</h2>
+<p>{{ 'The server prepares this PDF in the background. Refresh this page shortly.' if target == today else 'Only previously acquired rosters are available in the archive.' }}</p>
+<a class="button" href="">Refresh page</a>
+{% endif %}
+</section>
+<form method="get">
+<label for="date">Past 30 days</label>
+<select name="date" id="date">
+{% if target not in dates %}<option value="{{ target.isoformat() }}" selected>{{ target.isoformat() }} — not ready</option>{% endif %}
+{% for day in dates %}<option value="{{ day.isoformat() }}"{% if day == target %} selected{% endif %}>{{ day.strftime('%a, %b %d') }}</option>{% endfor %}
+</select>
+<button type="submit">View roster</button>
+</form>
+<p class="note">Keep this link private. Saved PDFs are retained for 30 calendar days. Refresh this page to select the current day after midnight.</p>
+<details><summary>Set up {{ shortcut_name }}</summary>
+<ol><li>Accept Text and URLs as input.</li><li>Get Contents of URL using Shortcut Input.</li><li>Print the resulting Contents of URL.</li></ol>
+</details>
+</main></body></html>

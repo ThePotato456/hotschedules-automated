@@ -70,4 +70,15 @@ def get_delivery_config() -> dict:
         "dm_include_link": _bool("DM_INCLUDE_LINK", True),
         # Attach the PDF file to the DM.
         "dm_attach_pdf": _bool("DM_ATTACH_PDF", True),
+        "print_page_url": (
+            os.environ["ROSTER_WEB_PUBLIC_URL"].rstrip("/") + "/" + os.environ["ROSTER_WEB_TOKEN"] + "/"
+            if os.environ.get("ROSTER_WEB_PUBLIC_URL") and os.environ.get("ROSTER_WEB_TOKEN") else None
+        ),
     }
+
+
+def get_cache_dir() -> Path:
+    """Persistent cache shared by the daily job and print server."""
+    load_env_file()
+    path = Path(os.environ.get("ROSTER_CACHE_DIR", "var/rosters")).expanduser()
+    return path if path.is_absolute() else REPO_ROOT / path

@@ -184,3 +184,13 @@ journalctl -u hotschedules-roster.service -n 50    # logs
   host, and in the Discord DM to the single configured recipient.
 - The systemd unit runs as the repo owner (not root) with light hardening
   (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=full`).
+
+## Cached roster print server
+
+Serve a PrintPDF page at `https://example.com/roster/<private-token>/`.
+The Python server acquires today’s roster on startup and at 07:45 store-local
+time, ready for printing and the 08:00 Discord job. PDFs are retained for 30
+calendar days with a date picker. See [print server setup](docs/PRINT_SERVER.md)
+for configuration, the systemd service, and Caddy hosting. Import
+[deploy/roster.caddy](deploy/roster.caddy) inside the existing `example.com`
+Caddy site block to proxy `/roster/*` to the Python server on `127.0.0.1:3010`.

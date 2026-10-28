@@ -15,3 +15,6 @@ venv/
 # Local output / captures
 *.result.json
 roster_result.json
+
+# Persistent roster cache (employee data)
+var/

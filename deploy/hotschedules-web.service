@@ -1,0 +1,22 @@
+[Unit]
+Description=HotSchedules cached roster print server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@APPDIR@
+EnvironmentFile=@APPDIR@/secrets.env
+Environment=PLAYWRIGHT_BROWSERS_PATH=@APPDIR@/.playwright
+ExecStart=@APPDIR@/.venv/bin/python -m hs_roster.web
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

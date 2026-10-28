@@ -4,12 +4,13 @@ Mirrors what newReport.hs#roster/<date> renders: fetch the week's shifts plus th
 employee/job/role/dayPart lookups, filter to the target day, and join into rows.
 """
 from __future__ import annotations
+import os
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .client import HSClient
-from .config import STORE_TZ
+from .config import STORE_TZ, load_env_file
 
 
 @dataclass
@@ -25,8 +26,9 @@ class RosterShift:
     day_part_start: int    # minutes from midnight (for ordering day parts)
 
 
-def today_in_store_tz(tz: str = STORE_TZ) -> date:
-    return datetime.now(ZoneInfo(tz)).date()
+def today_in_store_tz(tz: str | None = None) -> date:
+    load_env_file()
+    return datetime.now(ZoneInfo(tz or os.environ.get("HS_STORE_TZ", STORE_TZ))).date()
 
 
 def week_window(target: date, week_start: date) -> tuple[str, str]:

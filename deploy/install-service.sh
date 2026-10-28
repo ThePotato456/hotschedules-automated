@@ -20,7 +20,7 @@ fi
 echo ">> repo:     $REPO"
 echo ">> run user: $RUN_USER"
 
-for unit in hotschedules-roster.service hotschedules-roster.timer; do
+for unit in hotschedules-roster.service hotschedules-roster.timer hotschedules-web.service; do
   sed -e "s#@APPDIR@#$REPO#g" -e "s#@USER@#$RUN_USER#g" \
     "$REPO/deploy/$unit" > "$UNIT_DIR/$unit"
   echo ">> installed $UNIT_DIR/$unit"
@@ -36,3 +36,8 @@ echo ">> enabled. Upcoming runs:"
 systemctl list-timers hotschedules-roster.timer --no-pager || true
 echo ">> run once now to test:  sudo systemctl start hotschedules-roster.service"
 echo ">> logs:                  journalctl -u hotschedules-roster.service -n 50 --no-pager"
+
+# Opt in after configuring ROSTER_WEB_TOKEN and ROSTER_WEB_PUBLIC_URL.
+# The web server warms its cache on startup; it runs independently of DM delivery.
+echo ">> print server installed. After configuration, enable with:"
+echo "   sudo systemctl enable --now hotschedules-web.service"

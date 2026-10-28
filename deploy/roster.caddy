@@ -1,0 +1,7 @@
+# Import INSIDE the existing example.com site block.
+# Requires Caddy 2.8+ for log_skip. Preserve /roster for the Python app.
+log_skip /roster/*
+
+handle /roster/* {
+    reverse_proxy 127.0.0.1:3010
+}
