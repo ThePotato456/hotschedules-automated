@@ -14,6 +14,7 @@ from .config import get_delivery_config, get_cache_dir
 from .roster import today_in_store_tz
 from .publish import publish_pdf
 from .discord_dm import send_roster_dm, clear_dms
+from .links import roster_page_url
 
 log = logging.getLogger("hs_roster")
 
@@ -35,8 +36,12 @@ def run(target: date | None = None) -> int:
         out, shift_count = acquire_roster(cache_dir, target)
 
 
+    web = cfg["roster_web"]
+    print_url = roster_page_url(web["public_url"], web["token"], target) if web else None
     pub = None
-    if cfg["publish_enabled"]:
+    if print_url:
+        log.info("using the date-specific print server link — skipping public upload")
+    elif cfg["publish_enabled"]:
         pub = publish_pdf(out, base_url=cfg["uploader_base"])
         log.info("published -> %s (expires %s)", pub.public_url, pub.expires_at)
     else:
@@ -49,21 +54,19 @@ def run(target: date | None = None) -> int:
     embed: dict = {
         "title": f"Roster — {_human_date(target)}",
         "description": summary,
-        "color": 0xF26B21,  # HotSchedules orange
+        "color": 0x0069AA,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": "HotSchedules daily roster"},
     }
-    if pub and cfg["dm_include_link"]:
+    if print_url:
+        embed["url"] = print_url
+        embed["fields"] = [{"name": "Print", "value": f"[Print roster]({print_url})"}]
+    elif pub and cfg["dm_include_link"]:
         embed["fields"] = [{"name": "Download", "value": f"[Open roster PDF]({pub.public_url})"}]
         embed["footer"] = {"text": f"Link expires {pub.expires_at[:10]}"}
 
-    if cfg["print_page_url"]:
-        embed.setdefault("fields", []).append({
-            "name": "Print", "value": f"[Print roster]({cfg['print_page_url']}?date={target.isoformat()})",
-        })
-
     attachment = out if cfg["dm_attach_pdf"] else None
-    if attachment is None and not (pub and cfg["dm_include_link"]) and not cfg["print_page_url"]:
+    if attachment is None and not (pub and cfg["dm_include_link"]) and not print_url:
         log.warning("DM has neither PDF attachment nor link — embed only")
     send_roster_dm(cfg["token"], cfg["recipient_id"], embed=embed, pdf_path=attachment)
     log.info("DM delivered to %s", cfg["recipient_id"])

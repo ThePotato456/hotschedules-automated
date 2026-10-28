@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from hs_roster.cache import acquire_roster, prune_cache, roster_path
 from hs_roster.web import WebConfig, create_app, refresh_due, refresh_loop
+from hs_roster.config import get_delivery_config
 
 PDF = b"%PDF-1.4\nsynthetic test fixture\n%%EOF"
 TODAY = date(2026, 10, 28)
@@ -32,7 +33,12 @@ class WebTests(unittest.TestCase):
         self.clock.start()
         self.addCleanup(self.clock.stop)
         self.client = create_app(self.config).test_client()
-        self.root = f"/roster/{self.config.token}/"
+        self.root = f"/roster/{TODAY.isoformat()}/{self.config.token}/"
+        self.archive = f"/roster/all/{self.config.token}/"
+        self.legacy = f"/roster/{self.config.token}/"
+
+    def daily_path(self, value):
+        return f"/roster/{value}/{self.config.token}/"
 
     def save(self, target=TODAY):
         path = roster_path(self.directory, target)
@@ -41,7 +47,9 @@ class WebTests(unittest.TestCase):
 
     def test_page_and_pdf_require_secret(self):
         self.save()
-        for path in ["/roster/", "/roster/wrong/", "/roster/wrong/rosters/2026-10-28.pdf"]:
+        for path in ["/roster/", "/roster/all/wrong/", "/roster/2026-10-28/wrong/",
+                     "/roster/2026-10-28/wrong/pdf", "/roster/wrong/",
+                     "/roster/wrong/rosters/2026-10-28.pdf"]:
             self.assertEqual(self.client.get(path).status_code, 404)
 
     def test_ready_page_passes_date_specific_pdf_to_printpdf(self):
@@ -54,7 +62,7 @@ class WebTests(unittest.TestCase):
             query = parse_qs(urlsplit("shortcuts://" + link).query)
             self.assertEqual(query["name"], ["PrintPDF"])
             self.assertEqual(query["input"], ["text"])
-            self.assertEqual(query["text"], [f"https://example.com{self.root}rosters/2026-10-28.pdf"])
+            self.assertEqual(query["text"], [f"https://example.com{self.root}pdf"])
             acquire.assert_not_called()
 
     def test_missing_pdf_does_not_generate_on_request(self):
@@ -67,7 +75,7 @@ class WebTests(unittest.TestCase):
 
     def test_download_and_head(self):
         self.save()
-        path = self.root + "rosters/2026-10-28.pdf"
+        path = self.root + "pdf"
         with self.client.get(path) as response:
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data, PDF)
@@ -80,27 +88,67 @@ class WebTests(unittest.TestCase):
     def test_retention_boundaries_future_and_invalid_dates(self):
         self.save(TODAY - timedelta(days=29))
         self.save(TODAY - timedelta(days=30))
-        self.save(TODAY + timedelta(days=1))
-        with self.client.get(self.root + "rosters/2026-09-29.pdf") as response:
+        self.save(TODAY + timedelta(days=1)).write_bytes(PDF + b"\ntomorrow")
+        with self.client.get(self.daily_path("2026-09-29") + "pdf") as response:
             self.assertEqual(response.status_code, 200)
         for day in ["2026-09-28", "2026-10-29", "20261028", "not-a-date"]:
-            self.assertEqual(self.client.get(self.root + f"rosters/{day}.pdf").status_code, 404)
-            self.assertEqual(self.client.get(self.root + "?date=" + day).status_code, 404)
+            self.assertEqual(self.client.get(self.daily_path(day) + "pdf").status_code, 404)
+            self.assertEqual(self.client.get(self.daily_path(day)).status_code, 404)
 
     def test_archive_and_css_prefix(self):
         self.save()
         yesterday = TODAY - timedelta(days=1)
         self.save(yesterday)
-        body = self.client.get(self.root + "?date=2026-10-27").get_data(as_text=True)
-        self.assertIn("Saved roster", body)
-        self.assertIn("2026-10-27.pdf", body)
+        body = self.client.get(self.archive).get_data(as_text=True)
+        self.assertIn("All saved rosters", body)
+        self.assertIn(self.daily_path("2026-10-27"), body)
+        self.assertIn(self.root, body)
+        self.assertNotIn("shortcuts://", body)
+        daily = self.client.get(self.daily_path("2026-10-27")).get_data(as_text=True)
+        self.assertIn("Saved roster", daily)
+        self.assertIn(self.daily_path("2026-10-27") + "pdf", daily)
+        self.assertNotIn("<select", daily)
         with self.client.get("/roster/static/print.css") as response:
             self.assertEqual(response.status_code, 200)
 
     def test_corrupt_cache_is_not_served(self):
         self.save().write_bytes(b"error page")
         self.assertEqual(self.client.get(self.root).status_code, 503)
-        self.assertEqual(self.client.get(self.root + "rosters/2026-10-28.pdf").status_code, 404)
+        self.assertEqual(self.client.get(self.root + "pdf").status_code, 404)
+
+    def test_empty_archive_is_available_without_fetching(self):
+        with patch("hs_roster.web.acquire_roster") as acquire:
+            response = self.client.get(self.archive)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Your archive is empty", response.get_data(as_text=True))
+            acquire.assert_not_called()
+
+    def test_daily_link_stays_on_its_date_after_midnight_and_ignores_query_date(self):
+        self.save()
+        self.save(TODAY + timedelta(days=1)).write_bytes(PDF + b"\ntomorrow")
+        with patch.object(WebConfig, "today", return_value=TODAY + timedelta(days=1)):
+            body = self.client.get(self.root + "?date=2026-10-29").get_data(as_text=True)
+            self.assertIn("Wednesday, October 28, 2026", body)
+            self.assertIn(self.root + "pdf", body)
+            self.assertNotIn("2026-10-29", body)
+            self.assertNotIn("<select", body)
+            with self.client.get(self.root + "pdf?date=2026-10-29") as response:
+                self.assertEqual(response.data, PDF)
+
+    def test_legacy_links_redirect_to_specific_endpoints(self):
+        self.save()
+        paths = {
+            self.legacy: self.archive,
+            self.legacy + "?date=2026-10-28": self.root,
+            self.legacy + "rosters/2026-10-28.pdf": self.root + "pdf",
+        }
+        for old, new in paths.items():
+            with self.subTest(old=old):
+                response = self.client.get(old)
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.headers["Location"], new)
+                self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(self.client.get(self.legacy + "?date=not-a-date").status_code, 404)
 
     def test_prune_only_expired_roster_pdfs(self):
         old = self.save(TODAY - timedelta(days=30))
@@ -168,15 +216,39 @@ class WebTests(unittest.TestCase):
     def test_daily_delivery_reuses_cache_and_adds_print_link(self):
         import hs_roster.main as job
         self.save()
-        cfg = {"token": "fake-bot", "recipient_id": "fake-recipient",
-               "publish_enabled": False, "dm_include_link": False,
-               "dm_attach_pdf": True, "print_page_url": self.config.public_url + "/" + self.config.token + "/"}
-        with patch.object(job, "get_delivery_config", return_value=cfg), patch.object(job, "get_cache_dir", return_value=self.directory), patch.object(job, "today_in_store_tz", return_value=TODAY), patch.object(job, "acquire_roster") as acquire, patch.object(job, "send_roster_dm") as send:
+        env = {"DISCORD_BOT_TOKEN": "fake-bot", "DISCORD_RECIPIENT_ID": "fake-recipient",
+               "ROSTER_WEB_PUBLIC_URL": self.config.public_url, "ROSTER_WEB_TOKEN": self.config.token}
+        with patch.dict(os.environ, env, clear=True), patch("hs_roster.config.load_env_file"):
+            cfg = get_delivery_config()
+        with patch.object(job, "get_delivery_config", return_value=cfg), patch.object(job, "get_cache_dir", return_value=self.directory), patch.object(job, "today_in_store_tz", return_value=TODAY), patch.object(job, "acquire_roster") as acquire, patch.object(job, "publish_pdf") as publish, patch.object(job, "send_roster_dm") as send:
             self.assertEqual(job.run(TODAY), 0)
             acquire.assert_not_called()
             args = send.call_args.kwargs
             self.assertEqual(args["pdf_path"], roster_path(self.directory, TODAY))
-            self.assertIn("?date=2026-10-28", args["embed"]["fields"][0]["value"])
+            publish.assert_not_called()
+            print_url = "https://example.com" + self.root
+            self.assertEqual(args["embed"]["url"], print_url)
+            self.assertEqual(args["embed"]["fields"], [{"name": "Print", "value": f"[Print roster]({print_url})"}])
+            body = self.client.get(urlsplit(print_url).path).get_data(as_text=True)
+            link = html.unescape(body.split('href="shortcuts://', 1)[1].split('"', 1)[0])
+            pdf_url = parse_qs(urlsplit("shortcuts://" + link).query)["text"][0]
+            self.assertEqual(pdf_url, print_url + "pdf")
+            with self.client.get(urlsplit(pdf_url).path) as response:
+                self.assertEqual(response.data, args["pdf_path"].read_bytes())
+
+    def test_delivery_without_print_server_keeps_legacy_upload_link(self):
+        import hs_roster.main as job
+        from types import SimpleNamespace
+        self.save()
+        env = {"DISCORD_BOT_TOKEN": "fake-bot", "DISCORD_RECIPIENT_ID": "fake-recipient"}
+        with patch.dict(os.environ, env, clear=True), patch("hs_roster.config.load_env_file"):
+            cfg = get_delivery_config()
+        uploaded = SimpleNamespace(public_url="https://files.example.test/roster.pdf", expires_at="2026-10-29")
+        with patch.object(job, "get_delivery_config", return_value=cfg), patch.object(job, "get_cache_dir", return_value=self.directory), patch.object(job, "today_in_store_tz", return_value=TODAY), patch.object(job, "publish_pdf", return_value=uploaded) as publish, patch.object(job, "send_roster_dm") as send:
+            self.assertEqual(job.run(TODAY), 0)
+            publish.assert_called_once()
+            self.assertNotIn("url", send.call_args.kwargs["embed"])
+            self.assertIn(uploaded.public_url, send.call_args.kwargs["embed"]["fields"][0]["value"])
 
     def test_worker_fetches_on_startup_even_when_cache_is_fresh(self):
         self.save()

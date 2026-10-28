@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Rosters{% endblock %} · HotSchedules</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
+</head>
+<body>
+<header class="site-header">
+<div class="header-inner"><span class="brand">HotSchedules</span><span class="header-label">Daily roster</span></div>
+</header>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>

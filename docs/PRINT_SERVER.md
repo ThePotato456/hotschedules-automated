@@ -3,7 +3,10 @@
 The Python server serves a print page and previously rendered PDFs. Print requests
 read disk only: HotSchedules login and Chromium rendering run in a background
 worker. The existing daily Discord job reuses the prepared PDF, generating a
-fallback only when missing, and includes a date-specific Print roster link when the web URL and token are configured.
+fallback only when missing. When the web URL and token are configured, the Discord
+embed title and its Print roster link both open that day's dedicated print page.
+The print button passes that same day's protected PDF to PrintPDF. Public file
+uploads are skipped in this mode; the optional Discord PDF attachment is unchanged.
 
 Defaults:
 
@@ -113,18 +116,33 @@ References: [Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directi
 [handle](https://caddyserver.com/docs/caddyfile/directives/handle),
 [log_skip](https://caddyserver.com/docs/caddyfile/directives/log_skip).
 
-Open https://example.com/roster/YOUR_GENERATED_TOKEN/ in Safari.
-The public prefix alone returns 404. The page contains a date picker and a
-Print roster button. Shortcuts downloads directly from the same protected URL,
-so no browser sign-in session or public PDF uploader is needed. The server must
-be reachable from the phone.
+The endpoints after `/roster` explicitly identify the archive or a specific day:
 
-If you only want cached server links in Discord, disable the external upload:
+| Purpose | URL |
+|---|---|
+| Browse all retained rosters | `https://example.com/roster/all/YOUR_GENERATED_TOKEN/` |
+| Print page sent in the October 28 DM | `https://example.com/roster/2026-10-28/YOUR_GENERATED_TOKEN/` |
+| PDF used by that page's print button | `https://example.com/roster/2026-10-28/YOUR_GENERATED_TOKEN/pdf` |
 
-```dotenv
-PUBLISH_ENABLED=false
-DM_ATTACH_PDF=true
-```
+Open the archive URL in Safari to choose a day. Each daily page has a Print roster
+button and an Open PDF link, without a date picker. Its date comes from the path;
+query parameters cannot switch it to another day. It remains on that date after
+midnight and returns 404 once outside the retention window. The public prefix
+alone returns 404. The token still grants access to all retained dates; date paths
+pin the content of a link rather than limiting the token's permissions.
+
+Discord's Print roster link opens the HTTPS daily page. Tap its Print roster
+button to launch PrintPDF; the shortcut downloads the dated PDF directly from
+the protected server. No browser sign-in session or public PDF uploader is needed.
+The server must be reachable from the phone.
+
+Previously sent `/roster/TOKEN/?date=YYYY-MM-DD` and
+`/roster/TOKEN/rosters/YYYY-MM-DD.pdf` links redirect to their new dated endpoints.
+The old `/roster/TOKEN/` entry redirects to the archive.
+
+With the print server configured, `PUBLISH_ENABLED` and `DM_INCLUDE_LINK` apply
+only to the legacy uploader fallback used when no print server is configured.
+`DM_ATTACH_PDF` continues to control the separate Discord attachment.
 
 ## Apple Shortcut
 
@@ -132,7 +150,7 @@ The installed PrintPDF shortcut accepts Text and URLs, then:
 1. Get Contents of URL (GET), using Shortcut Input.
 2. Print, using Contents of URL from the previous action.
 
-The print button passes the selected date's PDF URL through
+The print button passes its page's fixed-date PDF URL through
 shortcuts://run-shortcut?name=PrintPDF&input=text&text=URL_ENCODED_PDF_URL.
 iOS opens Shortcuts and presents printing. This does not silently print.
 
@@ -141,4 +159,5 @@ iOS opens Shortcuts and presents printing. This does not silently print.
 Run .venv/bin/python -m unittest discover -s tests -v (Windows uses
 .venv/Scripts/python.exe). Tests use synthetic data, temporary caches, and mocked
 HotSchedules calls. They cover access control, date boundaries, missing/corrupt
-PDFs, PDF delivery, archive links, atomic replacement, and refresh scheduling.
+PDFs, the complete Discord-page-shortcut-PDF link chain, fixed dates across
+midnight, legacy redirects, archive links, atomic replacement, and refresh scheduling.

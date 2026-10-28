@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}All rosters{% endblock %}
+{% block content %}
+<p class="eyebrow">Reports / All rosters</p>
+<h1>All saved rosters</h1>
+<p>Choose a day to open its print page. PDFs are retained for {{ retention_days }} calendar days.</p>
+<a class="today-link" href="{{ today_url }}">Open today’s roster</a>
+<section class="card" aria-label="Saved rosters">
+{% if rosters %}
+<ul class="roster-list">
+{% for roster in rosters %}
+<li><a href="{{ roster.url }}"><span>{{ roster.date.strftime('%A, %B %d, %Y') }}</span><span class="roster-action">View roster &rarr;</span></a></li>
+{% endfor %}
+</ul>
+{% else %}
+<span class="status pending">No saved rosters</span>
+<h2>Your archive is empty</h2>
+<p>Saved rosters will appear here as the server prepares them.</p>
+{% endif %}
+</section>
+<p class="note">Keep this link private. Each roster link stays on its own date, including after midnight.</p>
+{% endblock %}

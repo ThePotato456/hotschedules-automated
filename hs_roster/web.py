@@ -13,11 +13,12 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
-from flask import Flask, Response, abort, render_template, request, send_file
+from flask import Flask, Response, abort, redirect, render_template, request, send_file, url_for
 from waitress import serve
 
 from .cache import acquire_roster, prune_cache, roster_path, valid_pdf
 from .config import get_cache_dir, load_env_file
+from .links import roster_page_url, roster_pdf_url
 
 log = logging.getLogger("hs_roster.web")
 
@@ -125,32 +126,42 @@ def create_app(config: WebConfig) -> Flask:
             abort(404)
         return target
 
-    @app.get(f"{prefix}/<token>/")
-    def index(token: str):
+    @app.get(f"{prefix}/all/<token>/")
+    def archive(token: str):
         authorize(token)
         today = config.today()
-        target = requested_date(request.args.get("date", today.isoformat()))
+        rosters = [
+            {"date": day, "url": roster_page_url(config.public_url, token, day)}
+            for offset in range(config.retention_days)
+            if valid_pdf(roster_path(config.cache_dir, day := today - timedelta(days=offset)))
+        ]
+        return render_template(
+            "archive.html", rosters=rosters, retention_days=config.retention_days,
+            today_url=roster_page_url(config.public_url, token, today),
+        )
+
+    @app.get(f"{prefix}/<value>/<token>/")
+    def daily(token: str, value: str):
+        authorize(token)
+        target = requested_date(value)
+        today = config.today()
         path = roster_path(config.cache_dir, target)
         available = valid_pdf(path)
-        pdf_url = f"{config.public_url}/{config.token}/rosters/{target.isoformat()}.pdf"
+        pdf_url = roster_pdf_url(config.public_url, token, target)
         shortcut = "shortcuts://run-shortcut?" + urlencode({
             "name": config.shortcut_name, "input": "text", "text": pdf_url,
         })
-        dates = [
-            day for offset in range(config.retention_days)
-            if valid_pdf(roster_path(config.cache_dir, day := today - timedelta(days=offset)))
-        ]
         response = app.make_response((render_template(
-            "print.html", target=target, today=today, dates=dates,
+            "print.html", target=target, today=today,
             available=available, shortcut=shortcut, pdf_url=pdf_url,
-            shortcut_name=config.shortcut_name,
+            shortcut_name=config.shortcut_name, retention_days=config.retention_days,
             updated=datetime.fromtimestamp(path.stat().st_mtime, ZoneInfo(config.timezone)).strftime("%b %d, %I:%M %p %Z") if available else None,
         ), 200 if available else 503))
         if not available:
             response.headers["Retry-After"] = "60"
         return response
 
-    @app.get(f"{prefix}/<token>/rosters/<value>.pdf")
+    @app.get(f"{prefix}/<value>/<token>/pdf")
     def pdf(token: str, value: str):
         authorize(token)
         target = requested_date(value)
@@ -160,6 +171,21 @@ def create_app(config: WebConfig) -> Flask:
         # No generation here. Date-specific URL prevents midnight from changing the selected PDF.
         return send_file(path, mimetype="application/pdf", as_attachment=False,
                          download_name=path.name, conditional=False, etag=False)
+
+    # Keep previously sent links working, while giving them a canonical endpoint.
+    @app.get(f"{prefix}/<token>/")
+    def legacy_index(token: str):
+        authorize(token)
+        if "date" in request.args:
+            target = requested_date(request.args["date"])
+            return redirect(url_for("daily", value=target.isoformat(), token=token))
+        return redirect(url_for("archive", token=token))
+
+    @app.get(f"{prefix}/<token>/rosters/<value>.pdf")
+    def legacy_pdf(token: str, value: str):
+        authorize(token)
+        target = requested_date(value)
+        return redirect(url_for("pdf", value=target.isoformat(), token=token))
 
     return app
 

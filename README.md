@@ -99,6 +99,11 @@ Booleans accept `true/false`, `1/0`, `yes/no`, `on/off`. **No inline comments** 
 put any comment on its own line (systemd's `EnvironmentFile` treats everything
 after `=` as the value).
 
+When `ROSTER_WEB_PUBLIC_URL` and `ROSTER_WEB_TOKEN` are configured, Discord links
+to the dated print page and skips public uploads. `PUBLISH_ENABLED` and
+`DM_INCLUDE_LINK` control legacy file-host delivery when the print server is not
+configured. `DM_ATTACH_PDF` still controls the separate PDF attachment.
+
 Common combinations:
 
 | Goal | Settings |
@@ -113,7 +118,7 @@ Common combinations:
 Two messages are sent, embed first so it renders above the file:
 
 1. **Embed** — title `Roster — <Day, MM/DD/YY>`, description `N shift(s)
-   scheduled.`, a HotSchedules-orange accent, a send timestamp, and a footer. When
+   scheduled.`, a blue accent, a send timestamp, and a footer. When
    publishing is on, a **Download → [Open roster PDF]** field is added and the
    footer shows the link expiry date.
 2. **PDF** — the rendered report, attached as its own message (when
@@ -187,10 +192,13 @@ journalctl -u hotschedules-roster.service -n 50    # logs
 
 ## Cached roster print server
 
-Serve a PrintPDF page at `https://example.com/roster/<private-token>/`.
+Browse saved rosters at `https://example.com/roster/all/<private-token>/`.
+Discord sends the daily print page, for example
+`https://example.com/roster/2026-10-28/<private-token>/`; its print button uses
+that same URL plus `pdf`. Each link stays on its own date after midnight.
 The Python server acquires today’s roster on startup and at 07:45 store-local
 time, ready for printing and the 08:00 Discord job. PDFs are retained for 30
-calendar days with a date picker. See [print server setup](docs/PRINT_SERVER.md)
+calendar days in a separate archive. See [print server setup](docs/PRINT_SERVER.md)
 for configuration, the systemd service, and Caddy hosting. Import
 [deploy/roster.caddy](deploy/roster.caddy) inside the existing `example.com`
 Caddy site block to proxy `/roster/*` to the Python server on `127.0.0.1:3010`.

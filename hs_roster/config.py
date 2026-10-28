@@ -64,14 +64,15 @@ def get_delivery_config() -> dict:
         "token": token,
         "recipient_id": recipient,
         "uploader_base": os.environ.get("UPLOADER_BASE_URL", "https://files.example.com"),
-        # Upload the PDF to the file host (and so have a link at all).
+        # Legacy file-host delivery, used when the print server is not configured.
         "publish_enabled": _bool("PUBLISH_ENABLED", True),
-        # Show the hosted link in the DM text.
+        # Show the legacy file-host link in the DM text.
         "dm_include_link": _bool("DM_INCLUDE_LINK", True),
         # Attach the PDF file to the DM.
         "dm_attach_pdf": _bool("DM_ATTACH_PDF", True),
-        "print_page_url": (
-            os.environ["ROSTER_WEB_PUBLIC_URL"].rstrip("/") + "/" + os.environ["ROSTER_WEB_TOKEN"] + "/"
+        "roster_web": (
+            {"public_url": os.environ["ROSTER_WEB_PUBLIC_URL"].rstrip("/"),
+             "token": os.environ["ROSTER_WEB_TOKEN"]}
             if os.environ.get("ROSTER_WEB_PUBLIC_URL") and os.environ.get("ROSTER_WEB_TOKEN") else None
         ),
     }
