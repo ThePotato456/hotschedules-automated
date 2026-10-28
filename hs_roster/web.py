@@ -172,11 +172,18 @@ def create_app(config: WebConfig) -> Flask:
     @app.get(f"{prefix}/<value>/<token>/pdf")
     def pdf(token: str, value: str):
         authorize(token)
-        target = requested_date(value)
+        return cached_pdf(requested_date(value))
+
+    @app.get(f"{prefix}/today/<token>/pdf")
+    def today_pdf(token: str):
+        authorize(token)
+        return cached_pdf(config.today())
+
+    def cached_pdf(target: date):
         path = roster_path(config.cache_dir, target)
         if not valid_pdf(path):
             abort(404)
-        # No generation here. Date-specific URL prevents midnight from changing the selected PDF.
+        # Requests only read the prepared PDF; they never trigger generation.
         return send_file(path, mimetype="application/pdf", as_attachment=False,
                          download_name=path.name, conditional=False, etag=False)
 

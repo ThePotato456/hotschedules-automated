@@ -122,6 +122,7 @@ The endpoints after `/roster` explicitly identify the archive or a specific day:
 |---|---|
 | Browse all retained rosters | `https://example.com/roster/all/YOUR_GENERATED_TOKEN/` |
 | Bookmark today's roster | `https://example.com/roster/today/YOUR_GENERATED_TOKEN/` |
+| Download today's PDF directly | `https://example.com/roster/today/YOUR_GENERATED_TOKEN/pdf` |
 | Print page sent in the October 28 DM | `https://example.com/roster/2026-10-28/YOUR_GENERATED_TOKEN/` |
 | PDF used by that page's print button | `https://example.com/roster/2026-10-28/YOUR_GENERATED_TOKEN/pdf` |
 
@@ -138,6 +139,13 @@ date on each open or refresh. Its print button still uses a dated PDF URL, so an
 already loaded page prints the date shown. If today's PDF is not ready, it shows
 the pending state rather than serving yesterday's roster. The archive's Open
 today's roster link uses this endpoint. Discord continues sending fixed-date links.
+
+Use `/roster/today/YOUR_GENERATED_TOKEN/pdf` for a permanent direct PDF URL, for
+example in a Shortcut. Each GET or HEAD request resolves the current store-local
+date and reads that day's cached PDF. Missing or corrupt PDFs return 404; this
+endpoint never substitutes yesterday's PDF or triggers generation. Responses use
+`Cache-Control: private, no-store`. Page print buttons continue using dated PDFs
+so they print the date displayed on the page.
 
 Discord's Print roster link opens the HTTPS daily page. Tap its Print roster
 button to launch PrintPDF; the shortcut downloads the dated PDF directly from

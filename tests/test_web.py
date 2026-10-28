@@ -49,7 +49,7 @@ class WebTests(unittest.TestCase):
     def test_page_and_pdf_require_secret(self):
         self.save()
         for path in ["/roster/", "/roster/all/wrong/", "/roster/today/wrong/", "/roster/2026-10-28/wrong/",
-                     "/roster/2026-10-28/wrong/pdf", "/roster/wrong/",
+                     "/roster/2026-10-28/wrong/pdf", "/roster/today/wrong/pdf", "/roster/wrong/",
                      "/roster/wrong/rosters/2026-10-28.pdf"]:
             self.assertEqual(self.client.get(path).status_code, 404)
 
@@ -165,6 +165,33 @@ class WebTests(unittest.TestCase):
             self.assertIn("Preparing today’s roster", body)
             self.assertNotIn("shortcuts://", body)
             self.assertNotIn("2026-10-27", body)
+            acquire.assert_not_called()
+
+    def test_today_pdf_serves_current_store_date_and_supports_head(self):
+        self.save()
+        tomorrow = TODAY + timedelta(days=1)
+        self.save(tomorrow).write_bytes(PDF + b"\ntomorrow")
+        for day, expected in [(TODAY, PDF), (tomorrow, PDF + b"\ntomorrow")]:
+            with self.subTest(day=day), patch.object(WebConfig, "today", return_value=day):
+                path = self.today_url + "pdf?date=2026-10-27"
+                with self.client.get(path) as response:
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.data, expected)
+                    self.assertEqual(response.mimetype, "application/pdf")
+                    self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+                    self.assertIn(roster_path(self.directory, day).name, response.headers["Content-Disposition"])
+                    self.assertNotIn("Location", response.headers)
+                with self.client.head(path) as response:
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.data, b"")
+                    self.assertEqual(response.mimetype, "application/pdf")
+
+    def test_today_pdf_missing_or_corrupt_never_serves_yesterday_or_fetches(self):
+        self.save(TODAY - timedelta(days=1))
+        with patch("hs_roster.web.acquire_roster") as acquire:
+            self.assertEqual(self.client.get(self.today_url + "pdf").status_code, 404)
+            self.save().write_bytes(b"corrupt PDF")
+            self.assertEqual(self.client.get(self.today_url + "pdf").status_code, 404)
             acquire.assert_not_called()
 
     def test_legacy_links_redirect_to_specific_endpoints(self):
