@@ -71,7 +71,12 @@ anywhere: `PUBLISH_ENABLED=false` (the DM then has no link).
 ```bash
 ./.venv/bin/python -m hs_roster.main            # today's roster (store tz)
 ./.venv/bin/python -m hs_roster.main 2026-10-27 # a specific date
+./.venv/bin/python -m hs_roster.main clean      # delete all of the bot's DMs
 ```
+
+`clean` deletes every message **this bot** has sent to `DISCORD_RECIPIENT_ID`
+(the roster PDFs and links). Discord only lets a bot delete its *own* messages,
+so your side of the conversation is never touched.
 
 ## Service management
 

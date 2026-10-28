@@ -2,6 +2,7 @@
 
 Run:  python -m hs_roster.main            # today's roster (store tz)
       python -m hs_roster.main 2026-10-27 # a specific date (for testing)
+      python -m hs_roster.main clean      # delete all of the bot's DMs
 """
 from __future__ import annotations
 import logging
@@ -15,7 +16,7 @@ from .config import get_delivery_config
 from .roster import fetch_roster, today_in_store_tz
 from .pdf import render_roster_pdf
 from .publish import publish_pdf
-from .discord_dm import send_roster_dm
+from .discord_dm import send_roster_dm, clear_dms
 
 log = logging.getLogger("hs_roster")
 
@@ -62,17 +63,28 @@ def run(target: date | None = None) -> int:
     return 0
 
 
+def run_cleanup() -> int:
+    """Delete all of the bot's DMs to the configured recipient."""
+    cfg = get_delivery_config()
+    deleted, failed = clear_dms(cfg["token"], cfg["recipient_id"])
+    log.info("cleanup: deleted %d message(s)%s", deleted,
+             f", {failed} could not be deleted" if failed else "")
+    return 0 if failed == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     argv = argv if argv is not None else sys.argv[1:]
-    target = date.fromisoformat(argv[0]) if argv else None
     try:
+        if argv and argv[0].lower() in ("clean", "clear", "cleanup"):
+            return run_cleanup()
+        target = date.fromisoformat(argv[0]) if argv else None
         return run(target)
     except Exception:
-        log.exception("roster job failed")
+        log.exception("job failed")
         return 1
 
 
