@@ -18,3 +18,11 @@ roster_result.json
 
 # Persistent roster cache (employee data)
 var/
+
+# Local scratch / generated data (employee info, logs)
+rosters/
+*.bak
+log.txt
+output.log
+output.txt
+patch.sh

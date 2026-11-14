@@ -29,7 +29,7 @@ login (httpx)  ->  render report page to PDF (Playwright Chromium)
 ```
 
 See `docs/API_RESEARCH.md` for the reverse-engineered HotSchedules API, the login
-flow, and the delivery contracts. Project status/plan: `ACTIONPLAN.md`.
+flow, and the delivery contracts.
 
 ## Layout
 
