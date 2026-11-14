@@ -1,10 +1,47 @@
-# HotSchedules Daily Roster → Discord
+<p align="center">
+  <img src="docs/banner.png" alt="HotSchedules Daily Roster → Discord" width="100%">
+</p>
 
-Fetches the current day's HotSchedules **Roster Report**, renders the *real*
-report page to a PDF (not a rebuilt table), optionally publishes that PDF to a
-public file host, and DMs it to one Discord recipient as a rich embed plus the
-PDF attachment. Runs weekdays at 08:00 as a systemd service on an Arch Linux
-server.
+<p align="center">
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
+  <img alt="Playwright" src="https://img.shields.io/badge/rendering-Playwright%20Chromium-2EAD33?logo=playwright&logoColor=white">
+  <img alt="Discord" src="https://img.shields.io/badge/delivery-Discord%20DM-5865F2?logo=discord&logoColor=white">
+  <img alt="systemd" src="https://img.shields.io/badge/scheduler-systemd%20timer-FCC624?logo=linux&logoColor=black">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Arch%20Linux-1793D1?logo=archlinux&logoColor=white">
+  <img alt="Flask" src="https://img.shields.io/badge/print%20server-Flask%20%2B%20Waitress-000000?logo=flask&logoColor=white">
+</p>
+
+<h1 align="center">HotSchedules Daily Roster → Discord</h1>
+
+<p align="center">
+  Fetch the day's HotSchedules <b>Roster Report</b>, render the <i>real</i> report page to PDF,
+  and deliver it to Discord every weekday morning — unattended.
+</p>
+
+---
+
+## Table of contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Project layout](#project-layout)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Cached roster print server](#cached-roster-print-server)
+- [Service management](#service-management)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Further documentation](#further-documentation)
+
+## Overview
+
+The service logs into HotSchedules, renders the current day's Roster Report with
+headless Chromium (a faithful PDF, not a rebuilt table), optionally publishes it,
+and DMs it to a single Discord recipient as a rich embed plus the PDF attachment.
+It runs Monday–Friday at 08:00 as a systemd timer on an Arch Linux server.
 
 ## Features
 
@@ -13,14 +50,16 @@ server.
 - **Rich Discord embed** — title, shift count, color accent, timestamp, and a
   download link when publishing is on; the PDF follows as a second message.
 - **Configurable delivery** — toggle the file upload, the link, and the
-  attachment independently via `secrets.env` (see below).
+  attachment independently via `secrets.env`.
 - **Timezone-correct** — "today" is computed in the store's timezone, so the
   08:00 run always targets the right day regardless of host clock.
+- **Cached print server** — browse and print saved rosters from a private,
+  token-protected URL; PDFs are retained for 30 days.
 - **Self-cleaning** — `clean` deletes the bot's own DMs, rate-limit aware.
 - **Unattended** — a systemd timer (`Persistent=true`) runs it Mon–Fri and
-  catches up after downtime; no credentials ever leave the box except the DM.
+  catches up after downtime; no credentials leave the box except the DM.
 
-## Pipeline
+## How it works
 
 ```
 login (httpx)  ->  render report page to PDF (Playwright Chromium)
@@ -28,10 +67,21 @@ login (httpx)  ->  render report page to PDF (Playwright Chromium)
                ->  Discord DM: embed first, then the PDF attachment
 ```
 
-See `docs/API_RESEARCH.md` for the reverse-engineered HotSchedules API, the login
-flow, and the delivery contracts.
+The reverse-engineered HotSchedules API, login flow, and delivery contracts are
+documented in [`docs/API_RESEARCH.md`](docs/API_RESEARCH.md).
 
-## Layout
+### What the DM looks like
+
+Two messages are sent, embed first so it renders above the file:
+
+1. **Embed** — title `Roster — <Day, MM/DD/YY>`, description `N shift(s)
+   scheduled.`, a blue accent, a send timestamp, and a footer. When publishing
+   is on, a **Download → [Open roster PDF]** field is added and the footer shows
+   the link expiry date.
+2. **PDF** — the rendered report, attached as its own message (when
+   `DM_ATTACH_PDF=true`).
+
+## Project layout
 
 ```
 hs_roster/
@@ -42,35 +92,43 @@ hs_roster/
   discord_dm.py  DM the embed + PDF, and the clean (DM-delete) helper
   config.py      secrets/env loading + delivery toggles
   main.py        entrypoint: login -> PDF -> [publish] -> DM; also `clean`
+  cache.py       cached roster/PDF storage and retention
+  links.py       print-page link construction
+  web.py         Flask print server (templates/, static/)
 deploy/
   setup.sh                     venv + deps + Playwright Chromium (repo-local)
-  install-service.sh           install + enable the systemd unit/timer
+  install-service.sh           install + enable the systemd units
   hotschedules-roster.service  oneshot job, triggered by the timer
   hotschedules-roster.timer    OnCalendar=Mon..Fri 08:00, Persistent=true
+  hotschedules-web.service     print server service
+  roster.caddy                 Caddy snippet proxying /roster/*
+docs/                          API research and print-server setup
+tests/                         test suite
 ```
 
 ## Requirements
 
 - Python 3.11+ (developed on 3.14)
-- Dependencies (`requirements.txt`): `httpx`, `playwright`, `tzdata`
+- Dependencies (`requirements.txt`): `httpx`, `playwright`, `tzdata`, `Flask`, `waitress`
 - Headless Chromium (installed by `deploy/setup.sh` into `<repo>/.playwright`)
 - A dedicated Discord bot that shares a server with the recipient
 - Linux for the service (Arch targeted); the pipeline itself runs on any OS
 
-## Setup (Arch server)
+## Installation
 
 ```bash
 git clone https://github.com/ThePotato456/hotschedules-automated.git \
   /opt/hotschedules-automation
 cd /opt/hotschedules-automation
 ./deploy/setup.sh                 # venv + deps + Playwright Chromium
-$EDITOR secrets.env               # fill in real values (see below)
+$EDITOR secrets.env               # fill in real values (see Configuration)
 ./.venv/bin/python -m hs_roster.main 2026-10-27   # test a known date
 sudo ./deploy/install-service.sh  # install + enable the 08:00 Mon–Fri timer
 ```
 
 If headless Chromium won't launch (a `libXYZ.so: cannot open shared object`
-error), install its libs:
+error), install its libraries:
+
 ```bash
 sudo pacman -S --needed nss nspr atk at-spi2-core libcups libdrm \
   libxcomposite libxdamage libxrandr libxkbcommon mesa pango cairo alsa-lib
@@ -80,11 +138,11 @@ sudo pacman -S --needed nss nspr atk at-spi2-core libcups libdrm \
 > downloading fallback build for ubuntu24.04-x64`. That's expected — the Ubuntu
 > build runs fine on Arch.
 
-### secrets.env
+## Configuration
 
 Copy `secrets.env.example` → `secrets.env` (git-ignored) and set:
 
-| Key | What |
+| Key | Description |
 |---|---|
 | `HS_USERNAME` / `HS_PASSWORD` | HotSchedules login |
 | `DISCORD_BOT_TOKEN` | A **dedicated** bot (Discord Developer Portal). Invite it to a server you also belong to, or it can't DM you. |
@@ -104,7 +162,7 @@ to the dated print page and skips public uploads. `PUBLISH_ENABLED` and
 `DM_INCLUDE_LINK` control legacy file-host delivery when the print server is not
 configured. `DM_ATTACH_PDF` still controls the separate PDF attachment.
 
-Common combinations:
+### Delivery presets
 
 | Goal | Settings |
 |---|---|
@@ -113,18 +171,7 @@ Common combinations:
 | Embed + link only, no file | `DM_ATTACH_PDF=false` |
 | Embed only (text) | `PUBLISH_ENABLED=false` + `DM_ATTACH_PDF=false` |
 
-## What the DM looks like
-
-Two messages are sent, embed first so it renders above the file:
-
-1. **Embed** — title `Roster — <Day, MM/DD/YY>`, description `N shift(s)
-   scheduled.`, a blue accent, a send timestamp, and a footer. When
-   publishing is on, a **Download → [Open roster PDF]** field is added and the
-   footer shows the link expiry date.
-2. **PDF** — the rendered report, attached as its own message (when
-   `DM_ATTACH_PDF=true`).
-
-## Run manually
+## Usage
 
 ```bash
 ./.venv/bin/python -m hs_roster.main            # today's roster (store tz)
@@ -140,6 +187,24 @@ to `DISCORD_RECIPIENT_ID` (the roster embeds and PDFs). Discord only lets a bot
 delete its *own* messages, so your side of the conversation is never touched. It
 reads Discord's rate-limit headers and paces itself, so clearing a long history
 won't trip the limiter.
+
+## Cached roster print server
+
+A small Flask/Waitress server serves cached rosters for browsing and printing:
+
+| URL | Purpose |
+|---|---|
+| `/roster/all/<private-token>/` | Browse saved rosters |
+| `/roster/today/<private-token>/` | Always follows the current store-local date — bookmark this |
+| `/roster/today/<private-token>/pdf` | Direct download of today's cached PDF |
+| `/roster/<YYYY-MM-DD>/<private-token>/` | Dated print page (the link Discord sends); its print button uses the same URL plus `pdf` |
+
+Each dated link stays on its own date after midnight. The server acquires
+today's roster on startup and at 07:45 store-local time, ready for printing and
+the 08:00 Discord job. PDFs are retained for 30 calendar days in a separate
+archive. Import [`deploy/roster.caddy`](deploy/roster.caddy) inside your Caddy
+site block to proxy `/roster/*` to the server on `127.0.0.1:3010`. Full details:
+[`docs/PRINT_SERVER.md`](docs/PRINT_SERVER.md).
 
 ## Service management
 
@@ -164,22 +229,14 @@ journalctl -u hotschedules-roster.service -n 50    # logs
 
 ## Troubleshooting
 
-- **`Executable doesn't exist at …/ms-playwright/…`** — Chromium isn't installed.
-  Run `./deploy/setup.sh` (installs it into `<repo>/.playwright`, which the app
-  and the service both use automatically).
-- **Chromium launches but errors on a missing `.so`** — install the shared libs
-  (the `pacman` line above).
-- **`ZoneInfoNotFoundError` / tz errors** — the `tzdata` dep provides the IANA
-  database; make sure `requirements.txt` is installed in the venv.
-- **Discord `Cannot send messages to this user` / DM fails** — the bot must share
-  a server with the recipient, and the recipient's privacy settings must allow
-  DMs from server members.
-- **Wrong day in the roster** — "today" uses `HS_STORE_TZ`; the systemd *timer*
-  uses the system timezone, so align the host clock (`timedatectl set-timezone
-  America/Chicago`) or edit the timer's time.
-- **Unofficial API** — HotSchedules' internal endpoints may change without
-  notice; a login or roster failure usually means a changed endpoint or an
-  expired password.
+| Symptom | Fix |
+|---|---|
+| `Executable doesn't exist at …/ms-playwright/…` | Chromium isn't installed. Run `./deploy/setup.sh` (installs into `<repo>/.playwright`, which the app and service both use). |
+| Chromium launches but errors on a missing `.so` | Install the shared libraries (the `pacman` command above). |
+| `ZoneInfoNotFoundError` / tz errors | The `tzdata` dependency provides the IANA database; make sure `requirements.txt` is installed in the venv. |
+| Discord `Cannot send messages to this user` | The bot must share a server with the recipient, and the recipient's privacy settings must allow DMs from server members. |
+| Wrong day in the roster | "Today" uses `HS_STORE_TZ`, but the systemd *timer* uses the system timezone. Align the host clock (`timedatectl set-timezone America/Chicago`) or edit the timer. |
+| Login or roster failure | HotSchedules' internal API is unofficial and may change without notice; a failure usually means a changed endpoint or an expired password. |
 
 ## Security
 
@@ -190,19 +247,9 @@ journalctl -u hotschedules-roster.service -n 50    # logs
 - The systemd unit runs as the repo owner (not root) with light hardening
   (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=full`).
 
-## Cached roster print server
+## Further documentation
 
-Browse saved rosters at `https://example.com/roster/all/<private-token>/`.
-Bookmark `https://example.com/roster/today/<private-token>/` to follow the current
-store-local date whenever you open or refresh the page.
-Use `https://example.com/roster/today/<private-token>/pdf` to download the current
-day's cached PDF directly.
-Discord sends the daily print page, for example
-`https://example.com/roster/2026-10-28/<private-token>/`; its print button uses
-that same URL plus `pdf`. Each link stays on its own date after midnight.
-The Python server acquires today’s roster on startup and at 07:45 store-local
-time, ready for printing and the 08:00 Discord job. PDFs are retained for 30
-calendar days in a separate archive. See [print server setup](docs/PRINT_SERVER.md)
-for configuration, the systemd service, and Caddy hosting. Import
-[deploy/roster.caddy](deploy/roster.caddy) inside the existing `example.com`
-Caddy site block to proxy `/roster/*` to the Python server on `127.0.0.1:3010`.
+- [`docs/API_RESEARCH.md`](docs/API_RESEARCH.md) — HotSchedules API, login flow, delivery contracts
+- [`docs/PRINT_SERVER.md`](docs/PRINT_SERVER.md) — print server configuration, systemd, Caddy
+
+<sub>HotSchedules is a trademark of its respective owner. This is an unofficial, independent project and is not affiliated with or endorsed by HotSchedules.</sub>
