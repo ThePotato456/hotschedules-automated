@@ -7,6 +7,7 @@ drops the app nav/sidebar, yielding a clean 1-page document.
 """
 from __future__ import annotations
 import os
+import tempfile
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
@@ -46,6 +47,7 @@ def render_roster_pdf(client: HSClient, target: date, out_path: str | Path,
     from playwright.sync_api import sync_playwright  # lazy import
 
     out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     url = REPORT_URL.format(date=target.isoformat())
     cookies = _cookies_for_playwright(client)
 
@@ -63,14 +65,35 @@ def render_roster_pdf(client: HSClient, target: date, out_path: str | Path,
                 timeout=wait_ms,
             )
             page.wait_for_timeout(2000)  # settle layout/fonts
-            page.pdf(
-                path=str(out_path),
+            pdf_bytes = page.pdf(
                 print_background=True,
                 prefer_css_page_size=True,
                 format="Letter",
                 margin={"top": "0.4in", "bottom": "0.4in",
                         "left": "0.4in", "right": "0.4in"},
             )
+
+            if not pdf_bytes:
+                raise RuntimeError("Chromium returned an empty PDF.")
+
+            temp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="wb",
+                    dir=out_path.parent,
+                    prefix=f".{out_path.stem}_",
+                    suffix=".tmp",
+                    delete=False,
+                ) as tmp:
+                    temp_path = Path(tmp.name)
+                    tmp.write(pdf_bytes)
+                    tmp.flush()
+                    os.fsync(tmp.fileno())
+
+                os.replace(temp_path, out_path)
+            finally:
+                if temp_path is not None:
+                    temp_path.unlink(missing_ok=True)
         finally:
             browser.close()
     if not out_path.exists() or out_path.stat().st_size == 0:
